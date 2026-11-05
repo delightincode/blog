@@ -59,6 +59,62 @@ function previewFromNodes(nodes) {
     .join(" ");
 }
 
+function youtubeEmbedUrl(value) {
+  if (typeof value !== "string") return null;
+
+  const iframeSource = value.match(/<iframe[^>]+src=["']([^"']+)["']/i)?.[1];
+  const htmlDecoded = iframeSource ?? value;
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = htmlDecoded;
+  const decoded = textarea.value.trim();
+
+  let url;
+  try {
+    url = new URL(decoded);
+  } catch {
+    const videoMatch = decoded.match(/(?:youtube\.com|youtu\.be)\/[^\s<>"']+/i);
+    if (!videoMatch) return null;
+    try {
+      url = new URL(videoMatch[0].startsWith("http") ? videoMatch[0] : `https://${videoMatch[0]}`);
+    } catch {
+      return null;
+    }
+  }
+
+  const host = url.hostname.replace(/^www\./, "");
+  let videoId;
+  if (host === "youtu.be") {
+    videoId = url.pathname.split("/").filter(Boolean)[0];
+  } else if (host === "youtube.com" || host === "m.youtube.com") {
+    if (url.pathname === "/watch") {
+      videoId = url.searchParams.get("v");
+    } else {
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (["embed", "shorts", "live"].includes(parts[0])) videoId = parts[1];
+    }
+  }
+
+  return /^[A-Za-z0-9_-]{11}$/.test(videoId ?? "")
+    ? `https://www.youtube-nocookie.com/embed/${videoId}`
+    : null;
+}
+
+function YouTubeEmbed({ url, title = "YouTube video player" }) {
+  if (!youtubeEmbedUrl(url)) return null;
+
+  return (
+    <div className="youtube-embed">
+      <iframe
+        src={youtubeEmbedUrl(url)}
+        title={title}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        referrerPolicy="strict-origin-when-cross-origin"
+        allowFullScreen
+      />
+    </div>
+  );
+}
+
 function App() {
   const [entries, setEntries] = useState([]);
   const [assets, setAssets] = useState({});
@@ -198,9 +254,23 @@ function App() {
                     )}
                     <div className="post-content">
                       {nodes.map((node, index) => {
+                        const text = node.nodeType === "paragraph" ? textFromNode(node) : "";
+                        const embedUrl = youtubeEmbedUrl(text);
+                        if (embedUrl) {
+                          return (
+                            <div className="youtube-embed" key={index}>
+                              <iframe
+                                src={embedUrl}
+                                title="YouTube video player"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                referrerPolicy="strict-origin-when-cross-origin"
+                                allowFullScreen
+                              />
+                            </div>
+                          );
+                        }
                         if (!isSelectedArticle) return null;
                         if (node.nodeType === "paragraph") {
-                          const text = textFromNode(node);
                           return text ? <p key={index}>{text}</p> : null;
                         }
 
@@ -214,6 +284,10 @@ function App() {
 
                         return null;
                       })}
+                      <YouTubeEmbed
+                        url={entry.fields.youtubeUrl}
+                        title={entry.fields.youtubeTitle || "YouTube video player"}
+                      />
                     </div>
                     {!isSelectedArticle && (
                       <p className="article-preview">{previewFromNodes(nodes)}</p>
