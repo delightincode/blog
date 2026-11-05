@@ -9,9 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@contentful/rich-text-react-renderer": "^16.2.2",
+    "@contentful/rich-text-types": "^17.2.7",
     "@vitejs/plugin-react": "^5.0.4",
-    "vite": "^7.1.7",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "vite": "^7.1.7"
   }
 }

@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { documentToReactComponents } from "@contentful/rich-text-react-renderer";
+import { BLOCKS, MARKS } from "@contentful/rich-text-types";
 
 let runtimeConfigPromise;
 let articlesPromise;
@@ -56,7 +58,7 @@ function previewFromNodes(nodes) {
     .filter((node) => node.nodeType === "paragraph")
     .map(textFromNode)
     .filter(Boolean)
-    .join(" ");
+    .join("\n");
 }
 
 function youtubeEmbedUrl(value) {
@@ -113,6 +115,52 @@ function YouTubeEmbed({ url, title = "YouTube video player" }) {
       />
     </div>
   );
+}
+
+function ContentfulRichText({ document, assets }) {
+  const options = {
+    renderMark: {
+      [MARKS.CODE]: (text) => <code>{text}</code>,
+      [MARKS.UNDERLINE]: (text) => <u>{text}</u>,
+      [MARKS.SUPERSCRIPT]: (text) => <sup>{text}</sup>,
+      [MARKS.SUBSCRIPT]: (text) => <sub>{text}</sub>,
+      [MARKS.STRIKETHROUGH]: (text) => <s>{text}</s>,
+    },
+    renderNode: {
+      [BLOCKS.PARAGRAPH]: (node, children) => {
+        const text = textFromNode(node);
+        const embedUrl = youtubeEmbedUrl(text);
+        return embedUrl ? (
+          <div className="youtube-embed">
+            <iframe
+              src={embedUrl}
+              title="YouTube video player"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
+          </div>
+        ) : (
+          <p>{children}</p>
+        );
+      },
+      [BLOCKS.EMBEDDED_ASSET]: (node) => {
+        const assetId = node.data?.target?.sys?.id;
+        const asset = node.data?.target?.fields
+          ? {
+              url: node.data.target.fields.file.url.startsWith("//")
+                ? `https:${node.data.target.fields.file.url}`
+                : node.data.target.fields.file.url,
+              title: node.data.target.fields.title || "",
+            }
+          : assets[assetId];
+
+        return asset ? <img src={asset.url} alt={asset.title} loading="lazy" /> : null;
+      },
+    },
+  };
+
+  return documentToReactComponents(document, options);
 }
 
 function App() {
@@ -234,7 +282,7 @@ function App() {
                   <div className="post-index">{String(entryIndex + 1).padStart(2, "0")}</div>
                   <div className="post-body">
                     <div className="post-meta">
-                      <span>Free writing</span>
+                      <span>{entry.metadata?.tags?.[0]?.sys?.id || "Free writing"}</span>
                       <time dateTime={entry.sys.createdAt}>
                         {new Intl.DateTimeFormat("en", {
                           month: "short",
@@ -253,10 +301,12 @@ function App() {
                       </h3>
                     )}
                     <div className="post-content">
-                      {nodes.map((node, index) => {
-                        const text = node.nodeType === "paragraph" ? textFromNode(node) : "";
-                        const embedUrl = youtubeEmbedUrl(text);
-                        if (embedUrl) {
+                      {!isSelectedArticle &&
+                        nodes.map((node, index) => {
+                          if (node.nodeType !== "paragraph") return null;
+                          const embedUrl = youtubeEmbedUrl(textFromNode(node));
+                          if (!embedUrl) return null;
+
                           return (
                             <div className="youtube-embed" key={index}>
                               <iframe
@@ -268,22 +318,12 @@ function App() {
                               />
                             </div>
                           );
-                        }
-                        if (!isSelectedArticle) return null;
-                        if (node.nodeType === "paragraph") {
-                          return text ? <p key={index}>{text}</p> : null;
-                        }
-
-                        if (node.nodeType === "embedded-asset-block") {
-                          const assetId = node.data?.target?.sys?.id;
-                          const asset = assets[assetId];
-                          return asset ? (
-                            <img key={index} src={asset.url} alt={asset.title} loading="lazy" />
-                          ) : null;
-                        }
-
-                        return null;
-                      })}
+                        })}
+                      {isSelectedArticle && entry.fields.content ? (
+                        <div className="rich-text">
+                          <ContentfulRichText document={entry.fields.content} assets={assets} />
+                        </div>
+                      ) : null}
                       <YouTubeEmbed
                         url={entry.fields.youtubeUrl}
                         title={entry.fields.youtubeTitle || "YouTube video player"}
@@ -333,9 +373,8 @@ function App() {
       <footer>
         <span>© 2026 The Free Writers</span>
         <div>
-          <a href="#">GitHub</a>
-          <a href="#">LinkedIn</a>
-          <a href="#">RSS</a>
+          <a href="https://github.com/delightincode" target="_blank">GitHub</a>
+          <a href="https://www.linkedin.com/in/tuan-pham-5526b9243/" target="_blank">LinkedIn</a>
         </div>
       </footer>
     </div>
